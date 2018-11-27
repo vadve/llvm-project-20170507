@@ -437,6 +437,48 @@ class OMPLoopDirective : public OMPExecutableDirective {
     return MutableArrayRef<Expr *>(Storage, CollapsedNum);
   }
 
+  MutableArrayRef<Expr *> getAnnoIVRefs() {
+    Expr **Storage = reinterpret_cast<Expr **>(
+        &*std::next(child_begin(),
+                    getArraysOffset(getDirectiveKind()) + 5 * CollapsedNum));
+    return MutableArrayRef<Expr *>(Storage, CollapsedNum);
+  }
+
+  MutableArrayRef<Expr *> getAnnoInits() {
+    Expr **Storage = reinterpret_cast<Expr **>(
+        &*std::next(child_begin(),
+                    getArraysOffset(getDirectiveKind()) + 6 * CollapsedNum));
+    return MutableArrayRef<Expr *>(Storage, CollapsedNum);
+  }
+
+  MutableArrayRef<Expr *> getAnnoFinals() {
+    Expr **Storage = reinterpret_cast<Expr **>(
+        &*std::next(child_begin(),
+                    getArraysOffset(getDirectiveKind()) + 7 * CollapsedNum));
+    return MutableArrayRef<Expr *>(Storage, CollapsedNum);
+  }
+
+  MutableArrayRef<Expr *> getAnnoSteps() {
+    Expr **Storage = reinterpret_cast<Expr **>(
+        &*std::next(child_begin(),
+                    getArraysOffset(getDirectiveKind()) + 8 * CollapsedNum));
+    return MutableArrayRef<Expr *>(Storage, CollapsedNum);
+  }
+
+  MutableArrayRef<Expr *> getAnnoIterStart(){
+    Expr **Storage = reinterpret_cast<Expr **>(
+        &*std::next(child_begin(),
+                    getArraysOffset(getDirectiveKind()) + 9 * CollapsedNum));
+    return MutableArrayRef<Expr *>(Storage, CollapsedNum);
+  }
+
+  MutableArrayRef<Expr *> getAnnoIterUpdate(){
+    Expr **Storage = reinterpret_cast<Expr **>(
+        &*std::next(child_begin(),
+                    getArraysOffset(getDirectiveKind()) + 10 * CollapsedNum));
+    return MutableArrayRef<Expr *>(Storage, CollapsedNum);
+  }
+
 protected:
   /// Build instance of loop directive of class \a Kind.
   ///
@@ -471,9 +513,10 @@ protected:
   /// Children number.
   static unsigned numLoopChildren(unsigned CollapsedNum,
                                   OpenMPDirectiveKind Kind) {
-    return getArraysOffset(Kind) + 5 * CollapsedNum; // Counters,
-                                                     // PrivateCounters, Inits,
-                                                     // Updates and Finals
+    return getArraysOffset(Kind) + 11 * CollapsedNum; // Counters,
+                                                      // PrivateCounters, Inits,
+                                                      // Updates, Finals, IVref,
+                                                      // LB, UB, and Step.
   }
 
   void setIterationVariable(Expr *IV) {
@@ -662,6 +705,14 @@ public:
   /// The expressions built for the OpenMP loop CodeGen for the
   /// whole collapsed loop nest.
   struct HelperExprs {
+    struct AnnoHelperExprs {
+      SmallVector<Expr *, 4> IVRef;
+      SmallVector<Expr *, 4> Init;
+      SmallVector<Expr *, 4> Final;
+      SmallVector<Expr *, 4> Step;
+      SmallVector<Expr *, 4> IterStart;
+      SmallVector<Expr *, 4> IterUpdate;
+    } AnnoExprs;
     /// Loop iteration variable.
     Expr *IterationVarRef;
     /// Loop last iteration number.
@@ -735,6 +786,20 @@ public:
     /// Initialize all the fields to null.
     /// \param Size Number of elements in the counters/finals/updates arrays.
     void clear(unsigned Size) {
+      AnnoExprs.IVRef.resize(Size);
+      AnnoExprs.Init.resize(Size);
+      AnnoExprs.Final.resize(Size);
+      AnnoExprs.Step.resize(Size);
+      AnnoExprs.IterStart.resize(Size);
+      AnnoExprs.IterUpdate.resize(Size);
+      for (unsigned i = 0; i < Size; ++i) {
+        AnnoExprs.IVRef[i] = nullptr;
+        AnnoExprs.Init[i] = nullptr;
+        AnnoExprs.Final[i] = nullptr;
+        AnnoExprs.Step[i] = nullptr;
+        AnnoExprs.IterStart[i] = nullptr;
+        AnnoExprs.IterUpdate[i] = nullptr;
+      }
       IterationVarRef = nullptr;
       LastIteration = nullptr;
       CalcLastIteration = nullptr;
@@ -779,6 +844,10 @@ public:
     }
   };
 
+protected:
+  void setAnnoExprs(const HelperExprs::AnnoHelperExprs &);
+
+public:
   /// Get number of collapsed loops.
   unsigned getCollapsedNumber() const { return CollapsedNum; }
 
@@ -996,6 +1065,42 @@ public:
 
   ArrayRef<Expr *> finals() const {
     return const_cast<OMPLoopDirective *>(this)->getFinals();
+  }
+
+  ArrayRef<Expr *> AnnoIVRefs() { return getAnnoIVRefs(); }
+
+  ArrayRef<Expr *> AnnoIVRefs() const {
+    return const_cast<OMPLoopDirective *>(this)->getAnnoIVRefs();
+  }
+
+  ArrayRef<Expr *> AnnoInits() { return getAnnoInits(); }
+
+  ArrayRef<Expr *> AnnoInits() const {
+    return const_cast<OMPLoopDirective *>(this)->getAnnoInits();
+  }
+
+  ArrayRef<Expr *> AnnoFinals() { return getAnnoFinals(); }
+
+  ArrayRef<Expr *> AnnoFinals() const {
+    return const_cast<OMPLoopDirective *>(this)->getAnnoFinals();
+  }
+
+  ArrayRef<Expr *> AnnoSteps() { return getAnnoSteps(); }
+
+  ArrayRef<Expr *> AnnoSteps() const {
+    return const_cast<OMPLoopDirective *>(this)->getAnnoSteps();
+  }
+
+  ArrayRef<Expr *> AnnoIterStart() { return getAnnoIterStart(); }
+
+  ArrayRef<Expr *> AnnoIterStart() const {
+    return const_cast<OMPLoopDirective *>(this)->getAnnoIterStart();
+  }
+
+  ArrayRef<Expr *> AnnoIterUpdate() { return getAnnoIterUpdate(); }
+
+  ArrayRef<Expr *> AnnoIterUpdate() const {
+    return const_cast<OMPLoopDirective *>(this)->getAnnoIterUpdate();
   }
 
   static bool classof(const Stmt *T) {

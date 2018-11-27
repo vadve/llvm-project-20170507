@@ -5068,3 +5068,11 @@ void CodeGenFunction::EmitSimpleOMPExecutableDirective(
       CodeGen);
 }
 
+void* runOMPLexicalScope(CodeGenFunction &CGF, const OMPExecutableDirective &S) {
+  // TODO: not sure if passing nothing for the third parameter is the correct way
+  return new OMPLexicalScope(CGF, S);
+}
+
+void destroyOMPLexicalScope(void *p) {
+  delete reinterpret_cast<OMPLexicalScope*>(p);
+}

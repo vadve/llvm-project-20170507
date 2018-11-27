@@ -2497,9 +2497,10 @@ LValue CodeGenFunction::EmitDeclRefLValue(const DeclRefExpr *E) {
             CapLVal.getTBAAInfo());
       }
 
-      assert(isa<BlockDecl>(CurCodeDecl));
-      Address addr = GetAddrOfBlockDecl(VD);
-      return MakeAddrLValue(addr, T, AlignmentSource::Decl);
+      if (isa<BlockDecl>(CurCodeDecl)) {
+        Address addr = GetAddrOfBlockDecl(VD);
+        return MakeAddrLValue(addr, T, AlignmentSource::Decl);
+      }
     }
   }
 

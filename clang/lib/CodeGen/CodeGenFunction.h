@@ -2347,6 +2347,12 @@ public:
     return it->second;
   }
 
+  /// Checks if the given variable is in the local map; we need to know this
+  /// in case we're processing a declaration in a dead region
+  bool inLocalDeclMap(const VarDecl *VD) const {
+    return LocalDeclMap.count(VD) > 0;
+  }
+
   /// Given an opaque value expression, return its LValue mapping if it exists,
   /// otherwise create one.
   LValue getOrCreateOpaqueLValueMapping(const OpaqueValueExpr *e);
@@ -2830,6 +2836,8 @@ public:
   ///
   /// \return True if the statement was handled.
   bool EmitSimpleStmt(const Stmt *S);
+
+  bool EmitOMPStmt(const Stmt *S);
 
   Address EmitCompoundStmt(const CompoundStmt &S, bool GetLast = false,
                            AggValueSlot AVS = AggValueSlot::ignored());

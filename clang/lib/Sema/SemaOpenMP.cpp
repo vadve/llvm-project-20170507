@@ -3961,6 +3961,11 @@ public:
   Expr *buildCounterInit() const;
   /// Build step of the counter be used for codegen.
   Expr *buildCounterStep() const;
+  /// Build the UB (inclusive) of the counter to be used for Anno codegen.
+  /// if i < n, return n-1; if i > n, return n+1; if i >= n or i <=n, return n;
+  Expr *buildAnnoUB() const;
+  /// Return true if the loop uses an iterator
+  bool isIterator() const;
   /// Build loop data with counter value for depend clauses in ordered
   /// directives.
   Expr *
@@ -4561,6 +4566,39 @@ Expr *OpenMPIterationSpaceChecker::buildCounterInit() const { return LB; }
 /// Build step of the counter be used for codegen.
 Expr *OpenMPIterationSpaceChecker::buildCounterStep() const { return Step; }
 
+Expr* OpenMPIterationSpaceChecker::buildAnnoUB() const {
+
+  if(isIterator()){
+    // UB - LB
+    Expr* UBsubLB = SemaRef.BuildBinOp(0/*Scope*/, SourceLocation(),
+                                BO_Sub, UB, LB).get();
+    // (UB - LB) - 1
+    Expr* one = SemaRef.ActOnIntegerConstant(SourceLocation(), 1).get();
+    return SemaRef.BuildBinOp(0/*Scope*/, SourceLocation(),
+                                BO_Sub, UBsubLB, one).get();
+  }
+
+  QualType UBType = UB->getType().getNonReferenceType();
+  //
+  // we need to return an inclusive upper bound, so if loop condition is i <= UB
+  // or i >= UB then return UB,
+  // const auto *Ty = Type.getTypePtrOrNull(); getType()
+  if (!TestIsStrictOp || UBType->isOverloadableType())
+    return UB;
+  //
+  // otherwise return UB -/+ 1 (depending on the direction of iteration)
+  auto &one = *SemaRef.ActOnIntegerConstant(SourceLocation(), 1).get();
+  return SemaRef.BuildBinOp(0/*Scope*/, SourceLocation(),
+                            SubtractStep ? BO_Add : BO_Sub,
+                            UB,  /* final value */
+                            &one).get();
+}
+
+bool OpenMPIterationSpaceChecker::isIterator() const {
+  QualType UBType = UB->getType();
+  return !UBType.isTrivialType(SemaRef.Context);
+}
+
 Expr *OpenMPIterationSpaceChecker::buildOrderedLoopData(
     Scope *S, Expr *Counter,
     llvm::MapVector<const Expr *, DeclRefExpr *> &Captures, SourceLocation Loc,
@@ -4634,6 +4672,10 @@ struct LoopIterationSpace final {
   /// This is step for the #CounterVar used to generate its update:
   /// #CounterVar = #CounterInit + #CounterStep * CurrentIteration.
   Expr *CounterStep = nullptr;
+  /// Upper-bound used for Anno code-gen
+  Expr *Anno_UB = nullptr;
+  /// If the loop uses an iterator, for Anno code-gen
+  bool IsIterator = false;
   /// Should step be subtracted?
   bool Subtract = false;
   /// Source range of the loop init.
@@ -4825,13 +4867,16 @@ static bool checkOpenMPIterationSpace(
   ResultIterSpace.CondSrcRange = ISC.getConditionSrcRange();
   ResultIterSpace.IncSrcRange = ISC.getIncrementSrcRange();
   ResultIterSpace.Subtract = ISC.shouldSubtractStep();
+  ResultIterSpace.IsIterator = ISC.isIterator();
+  ResultIterSpace.Anno_UB = ISC.buildAnnoUB();
 
   HasErrors |= (ResultIterSpace.PreCond == nullptr ||
                 ResultIterSpace.NumIterations == nullptr ||
                 ResultIterSpace.CounterVar == nullptr ||
                 ResultIterSpace.PrivateCounterVar == nullptr ||
                 ResultIterSpace.CounterInit == nullptr ||
-                ResultIterSpace.CounterStep == nullptr);
+                ResultIterSpace.CounterStep == nullptr ||
+                ResultIterSpace.Anno_UB == nullptr);
   if (!HasErrors && DSA.isOrderedRegion()) {
     if (DSA.getOrderedRegionParam().second->getNumForLoops()) {
       if (CurrentNestedLoopCount <
@@ -5112,9 +5157,77 @@ checkOpenMPLoop(OpenMPDirectiveKind DKind, Expr *CollapseLoopCountExpr,
   }
 
   Built.clear(/* size */ NestedLoopCount);
+  Scope *CurScope = DSA.getCurScope();
 
   if (SemaRef.CurContext->isDependentContext())
     return NestedLoopCount;
+
+  // generate the expressions needed for new codegen
+  if (SemaRef.getLangOpts().OpenMPAnnotate) {
+    for (unsigned Cnt = 0; Cnt < NestedLoopCount; ++Cnt) {
+      LoopIterationSpace &IS = IterSpaces[Cnt];
+
+      if (IS.IsIterator) {
+        // TODO: RENAME THIS ITERATOR TO INDUCTOR
+
+
+        // If we encounter on omp for loop with an iterator it for container c
+        // change the loop to use integer omp_inductor for the loop instead
+        // <int64> omp_inductor;
+        const QualType unsignedi64Type = SemaRef.Context.getIntTypeForBitwidth(64, /* Signed */true);
+        VarDecl* inductorVarDecl = buildVarDecl(SemaRef, SourceLocation(), unsignedi64Type, "omp_inductor", nullptr);
+        Expr* inductorDeclRefExpr = buildDeclRefExpr(SemaRef, inductorVarDecl, unsignedi64Type, SourceLocation());
+        Built.AnnoExprs.IVRef[Cnt] = inductorDeclRefExpr;
+
+        Expr* zero = SemaRef.ActOnIntegerConstant(SourceLocation(), 0).get();
+        Built.AnnoExprs.Init[Cnt] = zero;
+
+        // <iteratorType> omp_start;
+        const QualType prevIteratorType = IS.CounterVar->getType();
+        VarDecl* startVarDecl = buildVarDecl(SemaRef, SourceLocation(), prevIteratorType, "omp_start", nullptr);
+        Expr* startDeclRefExpr = buildDeclRefExpr(SemaRef, startVarDecl, prevIteratorType, SourceLocation());
+
+        Expr* startAssignmentExpr = SemaRef.BuildBinOp(0/*Scope*/,
+            SourceLocation(), BO_Assign, startDeclRefExpr, IS.CounterInit).get();
+        Built.AnnoExprs.IterStart[Cnt] = startAssignmentExpr;
+
+        // omp_start + omp_inductor;
+        Expr* updateAddExpr = SemaRef.BuildBinOp(0/*Scope*/,
+            SourceLocation(), BO_Add, startDeclRefExpr, inductorDeclRefExpr).get();
+        // it = omp_start + omp_inductor;
+        Expr* updateAssignmentExpr = SemaRef.BuildBinOp(0/*Scope*/,
+            SourceLocation(), BO_Assign, IS.CounterVar, updateAddExpr).get();
+        Built.AnnoExprs.IterUpdate[Cnt] = updateAssignmentExpr;
+
+        Expr* inductorStep;
+        if(isa<ImplicitCastExpr>(IS.CounterStep)){
+          const ImplicitCastExpr* icExpr = cast<ImplicitCastExpr>(IS.CounterStep);
+          const MaterializeTemporaryExpr* mtExpr = cast<MaterializeTemporaryExpr>(icExpr->getSubExpr());
+          const ImplicitCastExpr* icExpr2 = cast<ImplicitCastExpr>(mtExpr->GetTemporaryExpr());
+          inductorStep = const_cast<Expr*>(icExpr2->getSubExpr());
+        } else {
+          inductorStep = IS.CounterStep;
+        }
+        Built.AnnoExprs.Step[Cnt] = inductorStep;
+
+      } else {
+
+        Built.AnnoExprs.IVRef[Cnt] = IS.CounterVar;
+
+        Built.AnnoExprs.Init[Cnt] = IS.CounterInit;
+
+        // subtract (if loop is increasing) or add (if loop is decreasing) the
+        // value '1' from/to the final value.
+        Built.AnnoExprs.Step[Cnt] =
+          IS.Subtract ? SemaRef.BuildUnaryOp(CurScope, SourceLocation(),
+                                         UO_Minus, IS.CounterStep).get()
+                      : IS.CounterStep;
+      }
+
+      Built.AnnoExprs.Final[Cnt] = IS.Anno_UB;
+    }
+  }
+
 
   // An example of what is generated for the following code:
   //
@@ -5172,7 +5285,6 @@ checkOpenMPLoop(OpenMPDirectiveKind DKind, Expr *CollapseLoopCountExpr,
   ASTContext &C = SemaRef.Context;
   bool AllCountsNeedLessThan32Bits = C.getTypeSize(N0->getType()) < 32;
 
-  Scope *CurScope = DSA.getCurScope();
   for (unsigned Cnt = 1; Cnt < NestedLoopCount; ++Cnt) {
     if (PreCond.isUsable()) {
       PreCond =

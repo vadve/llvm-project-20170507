@@ -72,6 +72,10 @@ void CodeGenFunction::EmitStmt(const Stmt *S, ArrayRef<const Attr *> Attrs) {
   // Generate a stoppoint if we are emitting debug info.
   EmitStopPoint(S);
 
+  // If it's an OpenMP statement then take new path
+  if (getLangOpts().OpenMPAnnotate && EmitOMPStmt(S))
+    return;
+
   // Ignore all OpenMP directives except for simd if OpenMP with Simd is
   // enabled.
   if (getLangOpts().OpenMP && getLangOpts().OpenMPSimd) {

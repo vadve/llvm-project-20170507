@@ -54,6 +54,21 @@ void OMPLoopDirective::setFinals(ArrayRef<Expr *> A) {
   std::copy(A.begin(), A.end(), getFinals().begin());
 }
 
+void OMPLoopDirective::setAnnoExprs(const HelperExprs::AnnoHelperExprs &ie) {
+  assert(ie.IVRef.size() == getCollapsedNumber() &&
+         ie.Init.size() == getCollapsedNumber() &&
+         ie.Final.size() == getCollapsedNumber() &&
+         ie.Step.size() == getCollapsedNumber() &&
+         "Number of Anno-specific expressions is not the same as "
+         "the collapsed number");
+  std::copy(ie.IVRef.begin(), ie.IVRef.end(), getAnnoIVRefs().begin());
+  std::copy(ie.Init.begin(), ie.Init.end(), getAnnoInits().begin());
+  std::copy(ie.Final.begin(), ie.Final.end(), getAnnoFinals().begin());
+  std::copy(ie.Step.begin(), ie.Step.end(), getAnnoSteps().begin());
+  std::copy(ie.IterStart.begin(), ie.IterStart.end(), getAnnoIterStart().begin());
+  std::copy(ie.IterUpdate.begin(), ie.IterUpdate.end(), getAnnoIterUpdate().begin());
+}
+
 OMPParallelDirective *OMPParallelDirective::Create(
     const ASTContext &C, SourceLocation StartLoc, SourceLocation EndLoc,
     ArrayRef<OMPClause *> Clauses, Stmt *AssociatedStmt, bool HasCancel) {
@@ -105,6 +120,8 @@ OMPSimdDirective::Create(const ASTContext &C, SourceLocation StartLoc,
   Dir->setUpdates(Exprs.Updates);
   Dir->setFinals(Exprs.Finals);
   Dir->setPreInits(Exprs.PreInits);
+  if (!Exprs.AnnoExprs.IVRef.empty())
+    Dir->setAnnoExprs(Exprs.AnnoExprs);
   return Dir;
 }
 
@@ -154,6 +171,8 @@ OMPForDirective::Create(const ASTContext &C, SourceLocation StartLoc,
   Dir->setFinals(Exprs.Finals);
   Dir->setPreInits(Exprs.PreInits);
   Dir->setHasCancel(HasCancel);
+  if (!Exprs.AnnoExprs.IVRef.empty())
+    Dir->setAnnoExprs(Exprs.AnnoExprs);
   return Dir;
 }
 
@@ -203,6 +222,8 @@ OMPForSimdDirective::Create(const ASTContext &C, SourceLocation StartLoc,
   Dir->setUpdates(Exprs.Updates);
   Dir->setFinals(Exprs.Finals);
   Dir->setPreInits(Exprs.PreInits);
+  if (!Exprs.AnnoExprs.IVRef.empty())
+    Dir->setAnnoExprs(Exprs.AnnoExprs);
   return Dir;
 }
 
@@ -367,6 +388,8 @@ OMPParallelForDirective *OMPParallelForDirective::Create(
   Dir->setFinals(Exprs.Finals);
   Dir->setPreInits(Exprs.PreInits);
   Dir->setHasCancel(HasCancel);
+  if (!Exprs.AnnoExprs.IVRef.empty())
+    Dir->setAnnoExprs(Exprs.AnnoExprs);
   return Dir;
 }
 
@@ -415,6 +438,8 @@ OMPParallelForSimdDirective *OMPParallelForSimdDirective::Create(
   Dir->setUpdates(Exprs.Updates);
   Dir->setFinals(Exprs.Finals);
   Dir->setPreInits(Exprs.PreInits);
+  if (!Exprs.AnnoExprs.IVRef.empty())
+    Dir->setAnnoExprs(Exprs.AnnoExprs);
   return Dir;
 }
 
@@ -756,6 +781,8 @@ OMPTargetParallelForDirective *OMPTargetParallelForDirective::Create(
   Dir->setFinals(Exprs.Finals);
   Dir->setPreInits(Exprs.PreInits);
   Dir->setHasCancel(HasCancel);
+  if (!Exprs.AnnoExprs.IVRef.empty())
+    Dir->setAnnoExprs(Exprs.AnnoExprs);
   return Dir;
 }
 
@@ -897,6 +924,8 @@ OMPTaskLoopDirective *OMPTaskLoopDirective::Create(
   Dir->setUpdates(Exprs.Updates);
   Dir->setFinals(Exprs.Finals);
   Dir->setPreInits(Exprs.PreInits);
+  if (!Exprs.AnnoExprs.IVRef.empty())
+    Dir->setAnnoExprs(Exprs.AnnoExprs);
   return Dir;
 }
 
@@ -946,6 +975,8 @@ OMPTaskLoopSimdDirective *OMPTaskLoopSimdDirective::Create(
   Dir->setUpdates(Exprs.Updates);
   Dir->setFinals(Exprs.Finals);
   Dir->setPreInits(Exprs.PreInits);
+  if (!Exprs.AnnoExprs.IVRef.empty())
+    Dir->setAnnoExprs(Exprs.AnnoExprs);
   return Dir;
 }
 
@@ -994,6 +1025,8 @@ OMPDistributeDirective *OMPDistributeDirective::Create(
   Dir->setUpdates(Exprs.Updates);
   Dir->setFinals(Exprs.Finals);
   Dir->setPreInits(Exprs.PreInits);
+  if (!Exprs.AnnoExprs.IVRef.empty())
+    Dir->setAnnoExprs(Exprs.AnnoExprs);
   return Dir;
 }
 
@@ -1082,6 +1115,8 @@ OMPDistributeParallelForDirective *OMPDistributeParallelForDirective::Create(
   Dir->setCombinedDistCond(Exprs.DistCombinedFields.DistCond);
   Dir->setCombinedParForInDistCond(Exprs.DistCombinedFields.ParForInDistCond);
   Dir->HasCancel = HasCancel;
+  if (!Exprs.AnnoExprs.IVRef.empty())
+    Dir->setAnnoExprs(Exprs.AnnoExprs);
   return Dir;
 }
 
@@ -1149,6 +1184,8 @@ OMPDistributeParallelForSimdDirective::Create(
   Dir->setCombinedNextUpperBound(Exprs.DistCombinedFields.NUB);
   Dir->setCombinedDistCond(Exprs.DistCombinedFields.DistCond);
   Dir->setCombinedParForInDistCond(Exprs.DistCombinedFields.ParForInDistCond);
+  if (!Exprs.AnnoExprs.IVRef.empty())
+    Dir->setAnnoExprs(Exprs.AnnoExprs);
   return Dir;
 }
 
@@ -1202,6 +1239,8 @@ OMPDistributeSimdDirective *OMPDistributeSimdDirective::Create(
   Dir->setUpdates(Exprs.Updates);
   Dir->setFinals(Exprs.Finals);
   Dir->setPreInits(Exprs.PreInits);
+  if (!Exprs.AnnoExprs.IVRef.empty())
+    Dir->setAnnoExprs(Exprs.AnnoExprs);
   return Dir;
 }
 
@@ -1254,6 +1293,8 @@ OMPTargetParallelForSimdDirective *OMPTargetParallelForSimdDirective::Create(
   Dir->setUpdates(Exprs.Updates);
   Dir->setFinals(Exprs.Finals);
   Dir->setPreInits(Exprs.PreInits);
+  if (!Exprs.AnnoExprs.IVRef.empty())
+    Dir->setAnnoExprs(Exprs.AnnoExprs);
   return Dir;
 }
 
@@ -1298,6 +1339,8 @@ OMPTargetSimdDirective::Create(const ASTContext &C, SourceLocation StartLoc,
   Dir->setUpdates(Exprs.Updates);
   Dir->setFinals(Exprs.Finals);
   Dir->setPreInits(Exprs.PreInits);
+  if (!Exprs.AnnoExprs.IVRef.empty())
+    Dir->setAnnoExprs(Exprs.AnnoExprs);
   return Dir;
 }
 
@@ -1346,6 +1389,8 @@ OMPTeamsDistributeDirective *OMPTeamsDistributeDirective::Create(
   Dir->setUpdates(Exprs.Updates);
   Dir->setFinals(Exprs.Finals);
   Dir->setPreInits(Exprs.PreInits);
+  if (!Exprs.AnnoExprs.IVRef.empty())
+    Dir->setAnnoExprs(Exprs.AnnoExprs);
   return Dir;
 }
 
@@ -1397,6 +1442,8 @@ OMPTeamsDistributeSimdDirective *OMPTeamsDistributeSimdDirective::Create(
   Dir->setUpdates(Exprs.Updates);
   Dir->setFinals(Exprs.Finals);
   Dir->setPreInits(Exprs.PreInits);
+  if (!Exprs.AnnoExprs.IVRef.empty())
+    Dir->setAnnoExprs(Exprs.AnnoExprs);
   return Dir;
 }
 
@@ -1463,6 +1510,8 @@ OMPTeamsDistributeParallelForSimdDirective::Create(
   Dir->setCombinedNextUpperBound(Exprs.DistCombinedFields.NUB);
   Dir->setCombinedDistCond(Exprs.DistCombinedFields.DistCond);
   Dir->setCombinedParForInDistCond(Exprs.DistCombinedFields.ParForInDistCond);
+  if (!Exprs.AnnoExprs.IVRef.empty())
+    Dir->setAnnoExprs(Exprs.AnnoExprs);
   return Dir;
 }
 
@@ -1533,6 +1582,8 @@ OMPTeamsDistributeParallelForDirective::Create(
   Dir->setCombinedDistCond(Exprs.DistCombinedFields.DistCond);
   Dir->setCombinedParForInDistCond(Exprs.DistCombinedFields.ParForInDistCond);
   Dir->HasCancel = HasCancel;
+  if (!Exprs.AnnoExprs.IVRef.empty())
+    Dir->setAnnoExprs(Exprs.AnnoExprs);
   return Dir;
 }
 
@@ -1611,6 +1662,8 @@ OMPTargetTeamsDistributeDirective *OMPTargetTeamsDistributeDirective::Create(
   Dir->setUpdates(Exprs.Updates);
   Dir->setFinals(Exprs.Finals);
   Dir->setPreInits(Exprs.PreInits);
+  if (!Exprs.AnnoExprs.IVRef.empty())
+    Dir->setAnnoExprs(Exprs.AnnoExprs);
   return Dir;
 }
 
@@ -1681,6 +1734,8 @@ OMPTargetTeamsDistributeParallelForDirective::Create(
   Dir->setCombinedDistCond(Exprs.DistCombinedFields.DistCond);
   Dir->setCombinedParForInDistCond(Exprs.DistCombinedFields.ParForInDistCond);
   Dir->HasCancel = HasCancel;
+  if (!Exprs.AnnoExprs.IVRef.empty())
+    Dir->setAnnoExprs(Exprs.AnnoExprs);
   return Dir;
 }
 
@@ -1753,6 +1808,8 @@ OMPTargetTeamsDistributeParallelForSimdDirective::Create(
   Dir->setCombinedNextUpperBound(Exprs.DistCombinedFields.NUB);
   Dir->setCombinedDistCond(Exprs.DistCombinedFields.DistCond);
   Dir->setCombinedParForInDistCond(Exprs.DistCombinedFields.ParForInDistCond);
+  if (!Exprs.AnnoExprs.IVRef.empty())
+    Dir->setAnnoExprs(Exprs.AnnoExprs);
   return Dir;
 }
 
@@ -1809,6 +1866,8 @@ OMPTargetTeamsDistributeSimdDirective::Create(
   Dir->setUpdates(Exprs.Updates);
   Dir->setFinals(Exprs.Finals);
   Dir->setPreInits(Exprs.PreInits);
+  if (!Exprs.AnnoExprs.IVRef.empty())
+    Dir->setAnnoExprs(Exprs.AnnoExprs);
   return Dir;
 }
 

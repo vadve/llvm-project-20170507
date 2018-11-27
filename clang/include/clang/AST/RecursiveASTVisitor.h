@@ -511,6 +511,10 @@ public:
 
   bool canIgnoreChildDeclWhileTraversingDeclContext(const Decl *Child);
 
+  //
+  // allow users to traverse OMP clauses on demand
+  bool TraverseOMPClause(OMPClause *C);
+
 private:
   // These are helper methods used by more than one Traverse* method.
   bool TraverseTemplateParameterListHelper(TemplateParameterList *TPL);
@@ -536,7 +540,6 @@ private:
   bool TraverseVarHelper(VarDecl *D);
   bool TraverseOMPExecutableDirective(OMPExecutableDirective *S);
   bool TraverseOMPLoopDirective(OMPLoopDirective *S);
-  bool TraverseOMPClause(OMPClause *C);
 #define OPENMP_CLAUSE(Name, Class) bool Visit##Class(Class *C);
 #include "clang/Basic/OpenMPKinds.def"
   /// Process clauses with list of variables.
